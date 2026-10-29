@@ -148,6 +148,8 @@ aside.preview{position:sticky;top:calc(env(safe-area-inset-top,0px) + 12px);min-
       <h1>Convocations AS Pompidou</h1>
       <p>Compétitions UNSS · deux convocations par page A4, prêtes à découper</p>
     </div>
+  
+    <button type="button" onclick="EPSAide.ouvrir()" title="Mode d’emploi" aria-label="Mode d’emploi" style="margin-left:auto;width:46px;height:46px;border-radius:50%;border:1.5px solid currentColor;background:transparent;color:inherit;font-weight:900;font-size:20px;line-height:1;cursor:pointer">?</button>
   </header>
 
   <div class="grid">
@@ -1048,4 +1050,6 @@ checkDates(); refresh();
 if(document.fonts&&document.fonts.ready) document.fonts.ready.then(renderPreview);
 </script>
 <script>if('serviceWorker' in navigator&&location.protocol==='https:'){addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){})})}</script>
+<script src="aide.js"></script>
+<script src="eps-aide.js"></script>
 </body></html>
