@@ -75,6 +75,7 @@ button.primary:disabled{opacity:.45;cursor:not-allowed}
 .tablebox{overflow:auto;max-height:340px;border:1px solid var(--line);border-radius:8px}
 table{border-collapse:collapse;width:100%;font-size:14px}
 th,td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+.tri{border:0;background:none;padding:2px 0;font:inherit;color:inherit;text-transform:inherit;letter-spacing:inherit;cursor:pointer;min-height:32px}.tri[aria-sort]{color:var(--accent)}
 th{position:sticky;top:0;background:var(--panel);font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
 td.x button{padding:2px 8px;font-weight:500}
 tr.off td:not(:first-child){opacity:.45}
@@ -225,9 +226,10 @@ aside.preview{position:sticky;top:calc(env(safe-area-inset-top,0px) + 12px);min-
         </div>
 
         <div class="groupes" id="groupes" hidden>
-          <span class="glabel">Listes compétition détectées</span>
+          <span class="glabel">Listes compétition détectées : touchez une liste pour l’afficher (les coches ne changent pas)</span>
           <div class="chips" id="chips"></div>
           <p class="hint" id="groupeInfo"></p>
+          <button type="button" id="cocherListe" hidden>Cocher toute cette liste</button>
         </div>
         <div class="tools">
           <button type="button" id="all">Tout cocher</button>
@@ -238,7 +240,7 @@ aside.preview{position:sticky;top:calc(env(safe-area-inset-top,0px) + 12px);min-
         </div>
         <div class="tablebox">
           <table>
-            <thead><tr><th><span class="sr">✓</span></th><th>Nom</th><th>Prénom</th><th>Classe</th><th></th></tr></thead>
+            <thead><tr><th><span class="sr">✓</span></th><th><button type="button" class="tri" data-tri="nom">Nom</button></th><th><button type="button" class="tri" data-tri="prenom">Prénom</button></th><th><button type="button" class="tri" data-tri="classe">Classe</button></th><th></th></tr></thead>
             <tbody id="tbody"></tbody>
           </table>
         </div>
@@ -712,19 +714,26 @@ let students = [];
 let groupe=null;
 function groupesDispo(){return [...new Set(students.map(s=>s.eq).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'fr'))}
 function dansGroupe(s,g){return g==='tous'?!!s.eq:s.eq===g}
-function trierCoches(){students.sort((a,b)=>(b.on-a.on)||(a.eq||'~').localeCompare(b.eq||'~')||a.classe.localeCompare(b.classe,'fr',{numeric:true})||a.nom.localeCompare(b.nom,'fr'))}
-function choisirGroupe(g){groupe=g; students.forEach(s=>s.on=dansGroupe(s,g)); trierCoches(); filtre=''; refresh();}
+/* Les listes compétition sont des filtres d'affichage : elles ne changent jamais les coches. */
+let tri={k:'classe',dir:1};
+function trier(){const c=(a,b)=>String(a||'').localeCompare(String(b||''),'fr',{numeric:true,sensitivity:'base'});
+  const ordre={classe:['classe','nom','prenom'],nom:['nom','prenom','classe'],prenom:['prenom','nom','classe']}[tri.k];
+  students.sort((a,b)=>{for(const k of ordre){const r=c(a[k],b[k]);if(r)return r*(k===tri.k?tri.dir:1)}return 0})}
+function visible(s){return (!filtre||s.classe===filtre)&&(!groupe||dansGroupe(s,groupe))}
+function choisirGroupe(g){groupe=(g===groupe)?null:g; refresh();}
 function renderGroupes(){
   const gs=groupesDispo(); $('groupes').hidden=!gs.length; if(!gs.length){groupe=null;return}
-  const opts=gs.map(g=>[g,'Compétition '+g]); if(gs.length>1) opts.push(['tous',gs.join(' + ')]);
-  $('chips').innerHTML=opts.map(([g,l])=>`<button type="button" class="chip" data-g="${esc(g)}" aria-pressed="${groupe===g}">${esc(l)}<span class="c">${students.filter(s=>dansGroupe(s,g)).length}</span></button>`).join('');
+  const opts=[['','Tous les élèves'],...gs.map(g=>[g,'Compétition '+g])]; if(gs.length>1) opts.push(['tous',gs.join(' + ')]);
+  $('chips').innerHTML=opts.map(([g,l])=>`<button type="button" class="chip" data-g="${esc(g)}" aria-pressed="${(groupe||'')===g}">${esc(l)}<span class="c">${g?students.filter(s=>dansGroupe(s,g)).length:students.length}</span></button>`).join('');
+  $('cocherListe').hidden=!groupe;
   if(groupe){
-    const base=students.filter(s=>dansGroupe(s,groupe));
-    const ajout=students.filter(s=>s.on&&!dansGroupe(s,groupe)).length, retir=base.filter(s=>!s.on).length;
-    $('groupeInfo').textContent=`${groupe==='tous'?'Toutes les listes':'Compétition '+groupe} : ${base.length} élève${base.length>1?'s':''}`+(ajout?` + ${ajout} ajouté${ajout>1?'s':''}`:'')+(retir?` − ${retir} retiré${retir>1?'s':''}`:'')+'. Cochez d\u2019autres élèves dans la liste complète ci-dessous si besoin.';
-  } else $('groupeInfo').textContent='Choisissez une liste, puis complétez-la dans la liste complète si besoin.';
+    const base=students.filter(s=>dansGroupe(s,groupe)), coch=base.filter(s=>s.on).length;
+    $('groupeInfo').textContent=`${groupe==='tous'?'Toutes les listes':'Compétition '+groupe} : ${coch} coché${coch>1?'s':''} sur ${base.length}. Les élèves cochés dans les autres listes restent cochés.`;
+  } else $('groupeInfo').textContent='Tous les élèves sont affichés. Touchez une liste pour n’afficher qu’elle : les coches ne changent pas.';
 }
-$('chips').addEventListener('click',e=>{const b=e.target.closest('.chip'); if(b) choisirGroupe(b.dataset.g);});
+$('chips').addEventListener('click',e=>{const b=e.target.closest('.chip'); if(b) {const g=b.dataset.g; groupe=g||null; refresh();}});
+$('cocherListe').onclick=()=>{if(!groupe)return;students.forEach(s=>{if(dansGroupe(s,groupe))s.on=true});refresh()};
+document.querySelector('thead').addEventListener('click',e=>{const b=e.target.closest('[data-tri]');if(!b)return;const k=b.dataset.tri;tri=tri.k===k?{k,dir:-tri.dir}:{k,dir:1};trier();renderTable()});
 let raw = null; // imported rows
 let filtre = '';
 
@@ -764,7 +773,7 @@ function blocks(st){
   if(infos) B.push({align:'justify',size:11,gap:1.5,segs:[{t:infos}]});
   B.push({align:'justify',size:11,gap:2,segs:[
     {t:'Cette convocation vaut autorisation d’absence auprès de la vie scolaire. Merci de la signer et de la retourner à '},{t:prof,b:1},
-    {t:', en mains propres, par e-mail ('},{t:mail,c:BLUE,u:1},{t:') ou via Pronote '},
+    {t:', en mains propres, par e-mail ('},{t:mail,c:BLUE,u:1},{t:') '},
     {t:'avant le '+frDate($('dateRetour').value).toLowerCase()+($('hRetour').value?', '+frTime($('hRetour').value):''),b:1,c:RED},{t:', pour valider sa participation.'}]});
   const t = 'j’autorise mon enfant à venir seul(e) et à participer à la compétition de '+actL;
   B.push({check:1,size:10,gap:2.5,segs:[{t:t}]});
@@ -919,18 +928,20 @@ function renderTable(){
   const fc=$('filtreClasse'); fc.hidden=classes.length<2;
   fc.innerHTML='<option value="">Toutes les classes</option>'+classes.map(c=>`<option ${c===filtre?'selected':''}>${esc(c)}</option>`).join('');
   if(filtre&&!classes.includes(filtre)) filtre='';
-  const rows=students.map((s,i)=>({s,i})).filter(o=>!filtre||o.s.classe===filtre);
+  const rows=students.map((s,i)=>({s,i})).filter(o=>visible(o.s));
+  document.querySelectorAll('[data-tri]').forEach(b=>{const on=b.dataset.tri===tri.k;b.toggleAttribute('aria-sort',on);if(on)b.setAttribute('aria-sort',tri.dir>0?'ascending':'descending');b.textContent=b.textContent.replace(/ [▲▼]$/,'')+(on?(tri.dir>0?' ▲':' ▼'):'')});
   $('tbody').innerHTML=rows.map(({s,i})=>`<tr class="${s.on?'':'off'}"><td><input type="checkbox" data-i="${i}" ${s.on?'checked':''} aria-label="Convoquer ${esc(s.prenom+' '+s.nom)}"></td><td>${esc(s.nom)}${s.eq?'<span class="badge eq">équipe '+esc(s.eq)+'</span>':''}${s.lic===false?'<span class="badge">non licencié</span>':''}</td><td>${esc(s.prenom)}</td><td>${esc(s.classe||'')}</td><td class="x"><button type="button" data-del="${i}" aria-label="Retirer">✕</button></td></tr>`).join('')
     || '<tr><td colspan="5" style="color:var(--muted)">Aucun élève. Importez un fichier Excel ou ajoutez un élève à la main ci-dessous.</td></tr>';
   const n=students.filter(s=>s.on).length;
-  $('count').textContent=`${n} / ${students.length} coché${n>1?'s':''}`;
+  const hors=students.filter(s=>s.on&&!visible(s)).length;
+  $('count').textContent=`${n} / ${students.length} coché${n>1?'s':''}`+(hors?`, dont ${hors} hors de l’affichage`:'');
   const nl=students.filter(s=>s.on&&s.lic===false); $('licWarn').hidden=!nl.length;
   $('licWarn').textContent=nl.length?`Sans cotisation enregistrée : ${nl.map(s=>s.prenom+' '+s.nom).join(', ')}. Vérifiez la licence UNSS avant la compétition.`:'';
 }
 $('tbody').addEventListener('change',e=>{const i=e.target.dataset.i; if(i!=null){students[i].on=e.target.checked; refresh();}});
 $('tbody').addEventListener('click',e=>{const i=e.target.dataset.del; if(i!=null){students.splice(+i,1); refresh();}});
-$('all').onclick=()=>{students.forEach(s=>{if(!filtre||s.classe===filtre)s.on=true});refresh()};
-$('none').onclick=()=>{students.forEach(s=>{if(!filtre||s.classe===filtre)s.on=false});refresh()};
+$('all').onclick=()=>{students.forEach(s=>{if(visible(s))s.on=true});refresh()};
+$('none').onclick=()=>{students.forEach(s=>{if(visible(s))s.on=false});refresh()};
 $('vider').onclick=()=>{students=[];filtre='';groupe=null;refresh()};
 $('filtreClasse').onchange=e=>{filtre=e.target.value;renderTable()};
 $('addForm').addEventListener('submit',e=>{e.preventDefault();const nom=$('addNom').value.trim(),prenom=$('addPrenom').value.trim();
@@ -975,8 +986,7 @@ function applyMapping(){
       on: si<0 ? true : sv!=='', eq: sv && sv.length<=3 ? sv.toUpperCase() : '',
       lic: !lv ? undefined : /^(non|n|no)$/.test(lv) ? false : true});
   });
-  out.sort((a,b)=>(b.on-a.on)||a.classe.localeCompare(b.classe,'fr',{numeric:true})||a.nom.localeCompare(b.nom,'fr'));
-  students=out; filtre=''; { const gs=groupesDispo(); if(gs.length){ choisirGroupe(gs.length>1?'tous':gs[0]); } else { groupe=null; refresh(); } }
+  students=out; filtre=''; groupe=null; trier(); refresh();
   const nOn=out.filter(s=>s.on).length;
   $('mapInfo').textContent=`${out.length} élève${out.length>1?'s':''} importé${out.length>1?'s':''}`+(si>=0?`, dont ${nOn} coché${nOn>1?'s':''} d\u2019après la colonne compétition`:'')+'. Vérifiez les colonnes si les noms sont mal répartis.';
 }
